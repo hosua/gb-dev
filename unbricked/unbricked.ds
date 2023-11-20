@@ -81,7 +81,8 @@ ClearOam:
 	ld a, 0		   ; Store 0 in register a
 	ld [hli], a    ; Set Object's Tile ID to 0
 	ld [hli], a	   ; Set Object's Attributes to 0
-
+	
+	; init ball sprite
 	ld a, 100 + 16
 	ld [hli], a
 	ld a, 32 + 8
@@ -90,15 +91,6 @@ ClearOam:
 	ld [hli], a
 	ld a, 0
 	ld [hli], a
- 
- 	; The Tile IDs 0-127 not shared by the objects and the backgrounds
- 	; The Tile IDs 128-255 are shared by both, which is useful if we have tiles
- 	; that are used in both the background and by an object
- 	; In the Emulicious' Tilemap viewer, these tile sections separated by lines.
- 	; I'm still unsure about what the third section is -- read more into this?
-	
-	; Before we can use our objects, we must ensure to enable them with the
-	; LCDCF_OBJON flag! Otherwise they won't render.
 
 
 	; Now that we're done working with OAM, turn the LCD on and enable objects
@@ -149,6 +141,7 @@ WaitVBlank2:
 	call BounceOnLeft
 	call BounceOnRight
 	call BounceOnBottom
+	call PaddleBounce
 	
 	call UpdateKeys
 
@@ -270,10 +263,10 @@ IsWallTile:
 BounceOnTop:
     ; Remember to offset the OAM position!
     ; (8, 16) in OAM coordinates is (0, 0) on the screen.
-    ld a, [_OAMRAM + 4]
+    ld a, [_OAMRAM + 4 + OAMA_Y]
     sub a, 16 + 1
     ld c, a
-    ld a, [_OAMRAM + 5]
+    ld a, [_OAMRAM + 4 + OAMA_X]
     sub a, 8
     ld b, a
     call GetTileByPixel ; Returns tile address in hl
@@ -285,11 +278,11 @@ BounceOnTop:
 	ret
 
 BounceOnRight:
-    ld a, [_OAMRAM + 4]
+    ld a, [_OAMRAM + 4 + OAMA_Y]
     sub a, 16
     ld c, a
-    ld a, [_OAMRAM + 5]
-    sub a, 8 - 1
+    ld a, [_OAMRAM + 4 + OAMA_X]
+    sub a, 8 - 6
     ld b, a
     call GetTileByPixel
     ld a, [hl]
@@ -300,10 +293,10 @@ BounceOnRight:
 	ret
 
 BounceOnLeft:
-    ld a, [_OAMRAM + 4]
+    ld a, [_OAMRAM + 4 + OAMA_Y]
     sub a, 16
     ld c, a
-    ld a, [_OAMRAM + 5]
+    ld a, [_OAMRAM + 4 + OAMA_X]
     sub a, 8 + 1
     ld b, a
     call GetTileByPixel
@@ -315,10 +308,10 @@ BounceOnLeft:
 	ret
 
 BounceOnBottom:
-    ld a, [_OAMRAM + 4]
+    ld a, [_OAMRAM + 4 + OAMA_Y]
     sub a, 16 - 1
     ld c, a
-    ld a, [_OAMRAM + 5]
+    ld a, [_OAMRAM + 4 + OAMA_X]
     sub a, 8
     ld b, a
     call GetTileByPixel
@@ -328,6 +321,30 @@ BounceOnBottom:
     ld a, -1
     ld [wBallMomentumY], a
 	ret
+
+PaddleBounce:
+    ; First, check if the ball is low enough to bounce off the paddle.
+    ld a, [_OAMRAM]
+    ld b, a
+    ld a, [_OAMRAM + 4 + OAMA_Y]
+	add a, 6
+    cp a, b
+	ret nz ; If the ball isn't at the same Y position as the paddle, it can't bounce.
+    ; Now let's compare the X positions of the objects to see if they're touching.
+    ld a, [_OAMRAM + 4 + OAMA_X] ; Ball's X position.
+    ld b, a
+    ld a, [_OAMRAM + OAMA_X] ; Paddle's X position.
+    sub a, 8
+    cp a, b
+	ret nc
+    add a, 8 + 16 ; 8 to undo, 16 as the width.
+    cp a, b
+	ret c
+
+    ld a, -1
+    ld [wBallMomentumY], a
+	ret
+PaddleBounceDone:
 
 Memcopy:
 	ld a, [de]
