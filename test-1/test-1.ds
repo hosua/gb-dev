@@ -1,0 +1,180 @@
+INCLUDE "hardware.inc"
+
+SECTION "Header", ROM0[$100]
+
+	jp EntryPoint
+
+	ds $150 - @, 0 ; Make room for the header
+
+EntryPoint:
+	; Program starts here
+
+WaitVBlank:
+	ld a, [rLY]
+	cp 144 
+	jp c, WaitVBlank 
+
+	; Turn the LCD off
+	ld a, 0
+	ld [rLCDC], a
+
+	; Copy the tile data
+	ld de, Tiles
+	ld hl, $9000
+	ld bc, TilesEnd - Tiles
+CopyTiles:
+	ld a, [de]
+	ld [hli], a
+	inc de
+	dec bc
+	ld a, b
+	or a, c
+	jp nz, CopyTiles
+
+	; Copy the tilemap
+	ld de, Tilemap
+	ld hl, $9800
+	ld bc, TilemapEnd - Tilemap
+CopyTilemap:
+	ld a, [de]
+	ld [hli], a
+	inc de
+	dec bc
+	ld a, b
+	or a, c
+	jp nz, CopyTilemap
+
+; Clear the Object Attribute Memory (OAM)
+	ld a, 0	  ; We want to initialize OAM to 0. Store 0 into register a
+	ld b, 160 ; OAM is always 160 bytes long, store this size into register b
+	ld hl, _OAMRAM ; store the _OAMRAM register address into hl
+ClearOam:
+	ld [hli], a ; Fill the current OAM byte with 0 (we stored 0 into register a earlier)
+	dec b
+	jp nz, ClearOam
+ 
+ 	ld de, Tetronimo 
+ 	ld hl, $8000 ; Address of our first non-shared tile (tile index 0)
+ 	ld bc, TetronimoEnd - Tetronimo 
+CopyTetronimo:
+	ld a, [de]  	  ; Load tetronimo byte into register a
+	ld [hli], a 	  ; Load tetronimo byte into value at hl
+	inc de			  ; Point to next tetronimo byte
+	dec bc 			  ;
+	ld a, b     	  ; Load b into a to check if we've reached 0 yet
+	or a, c     	  ; Set's 0 flag if we reached 0
+	jp nz, CopyTetronimo ; Continue loop until we finished copying all tetronimo bytes
+
+; Draw the object
+	ld hl, _OAMRAM
+	ld a, 128 + 16 
+	ld [hli], a    ; Store the object's Y valueS
+	ld a, 16 + 8   ; 
+	ld [hli], a    ; Store the object's X value
+	ld a, 0		   ; Store 0 in register a
+	ld [hli], a    ; Set Object's Tile ID to 0
+	ld [hl], a	   ; Set Object's Attributes to 0
+
+; Turn the LCD on, with objects enabled
+	ld a, LCDCF_ON | LCDCF_BGON | LCDCF_OBJON
+	ld [rLCDC], a ; Store flags stored into a into our rLCDC register
+
+	; During the first (blank) frame, initialize the display registers
+	ld a, %11100100
+	ld [rBGP], a    ; rBGP -- register for background palette data
+	ld a, %11100100
+	ld [rOBP0], a   ; r0BP0 -- register for Object palette data 0 -- what does this mean??
+	
+	; Initialize wFrameCounter=0
+	ld a, 0
+	ld [wFrameCounter], a
+
+Main: 
+	; Wait until it's *not* VBlank
+	ld a, [rLY] ; register for LCDC Y-Coordinate
+	cp 144      ; compare register a-144
+	jp nc, Main ; Repeat main loop while a < 144
+
+WaitVBlank2:
+	ld a, [rLY]
+	cp 144
+	jp c, WaitVBlank2
+	
+	; Increment wFrameCounter
+	ld a, [wFrameCounter]
+	inc a
+	ld [wFrameCounter], a
+
+	cp a, 5 ; Every 5 frames 
+	jp nz, Main
+
+	; Reset the frame counter back to 0
+	ld a, 0
+	ld [wFrameCounter], a
+
+	; =============MOVEMENT LOGIC==============
+	; Move the tetronimo one pixel to the right
+	ld a, [_OAMRAM + 1]
+	inc a
+	ld [_OAMRAM + 1], a
+	jp Main
+	
+
+; Tile data should always go at the end
+
+Tiles:
+	; $00
+	dw `00000000
+	dw `00000000
+	dw `00000000
+	dw `00000000
+	dw `00000000
+	dw `00000000
+	dw `00000000
+	dw `00000000
+	; $01
+	dw `33333333
+	dw `31111113
+	dw `31111113
+	dw `31111113
+	dw `31111113
+	dw `31111113
+	dw `31111113
+	dw `33333333
+TilesEnd:
+
+Tilemap:
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
+TilemapEnd:
+
+Tetronimo:
+	dw `33333333
+	dw `31111113
+	dw `31111113
+	dw `31111113
+	dw `31111113
+	dw `31111113
+	dw `31111113
+	dw `33333333
+TetronimoEnd:
+
+; =======DECLARING GLOBAL VARIABLES=========
+SECTION "Counter", WRAM0
+wFrameCounter: db
