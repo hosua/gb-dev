@@ -53,27 +53,14 @@ CopyTilemap:
 	ld a, b
 	or a, c
 	jp nz, CopyTilemap
-
-	; Turn the LCD on
-	ld a, LCDCF_ON | LCDCF_BGON
-	ld [rLCDC], a
-
-	; During the first (blank) frame, initialize display registers
-	ld a, %11100100
-	ld [rBGP], a
 	
 	; Object Attribute Memory will be filled with garbage data, so we should clear it first.
 
-	; Clear the Object Attribute Memory (OAM)
-	ld a, 0	  ; We want to initialize OAM to 0. Store 0 into register a
-	ld b, 160 ; OAM is always 160 bytes long, store this size into register b
-	ld hl, _OAMRAM ; store the _OAMRAM register address into hl
  
  	; Copy the tile data
  	ld de, Paddle
  	ld hl, $8000 ; Address of our first non-shared tile (tile index 0)
  	ld bc, PaddleEnd - Paddle
-
 CopyPaddle:
 	ld a, [de]  	  ; Load paddle byte into register a
 	ld [hli], a 	  ; Load paddle byte into value at hl
@@ -83,6 +70,10 @@ CopyPaddle:
 	or a, c     	  ; Set's 0 flag if we reached 0
 	jp nz, CopyPaddle ; Continue loop until we finished copying all paddle bytes
 
+	; Clear the Object Attribute Memory (OAM)
+	ld a, 0	  ; We want to initialize OAM to 0. Store 0 into register a
+	ld b, 160 ; OAM is always 160 bytes long, store this size into register b
+	ld hl, _OAMRAM ; store the _OAMRAM register address into hl
 ClearOam:
 	ld [hli], a ; Fill the current OAM byte with 0 (we stored 0 into register a earlier)
 	dec b
