@@ -135,60 +135,70 @@ WaitVBlank2:
 
 	ld a, [wFrameCounter]
 	cp 15
-	jp c, MovePieceDown
 
-	; jp Main
-
-MovePieceDown:
-	;
-	
 	call UpdateKeys
+	call CheckLeft
+	call CheckRight
+	call CheckUp
+	call CheckDown
+
+	jp Main
 
 CheckLeft:
     ld a, [wCurKeys]
     and a, PADF_LEFT
-    jp z, CheckRight
-MoveLeft:
-    ld a, [_OAMRAM + 1]
-    dec a
-    jp z, Main
-    ld [_OAMRAM + 1], a
-    jp Main
+	ret z
+	ld hl, BOX1
+	call MoveObjLeft
+	ld hl, BOX2
+	call MoveObjLeft
+	ld hl, BOX3
+	call MoveObjLeft
+	ld hl, BOX4
+	call MoveObjLeft
+	ret
 
-; Then check the right button.
 CheckRight:
     ld a, [wCurKeys]
     and a, PADF_RIGHT
-    jp z, CheckUp
-MoveRight:
-    ld a, [BOX1_X]
-    inc a
-    jp z, Main
-    ld [BOX1_X], a
-    jp Main
+	ret z
+	ld hl, BOX1
+    call MoveObjRight 
+	ld hl, BOX2
+    call MoveObjRight 
+	ld hl, BOX3
+    call MoveObjRight 
+	ld hl, BOX4
+    call MoveObjRight 
+	ret
 
 CheckUp:
 	ld a, [wCurKeys]
 	and a, PADF_UP
-	jp z, CheckDown
-MoveUp:
-	ld a, [BOX1_Y]
-	dec a
-	; cp $10
-	jp z, Main
-	ld [BOX1_Y], a
-	jp Main
+	ret z
+	ld hl, BOX1
+	call MoveObjUp
+	ld hl, BOX2
+	call MoveObjUp
+	ld hl, BOX3
+	call MoveObjUp
+	ld hl, BOX4
+	call MoveObjUp
+	ret
 
 CheckDown:
 	ld a, [wCurKeys]
 	and a, PADF_DOWN
-	jp z, Main
-MoveDown:
-	ld a, [BOX1_Y]
-	inc a
-	jp z, Main
-	ld [BOX1_Y], a
-	jp Main
+	ret z
+	ld hl, BOX1
+	call MoveObjDown
+	ld hl, BOX2
+	call MoveObjDown
+	ld hl, BOX3
+	call MoveObjDown
+	ld hl, BOX4
+	call MoveObjDown
+	ret
 
 UpdateKeys:
 	; Poll half the controller
@@ -225,6 +235,36 @@ UpdateKeys:
 	ldh a, [rP1] ; this read counts
 	or a, $F0 ; A7-4 = 1; A3-0 = unpressed keys
 .knownret
+	ret
+
+; Before calling these move functions, load the object addr into register HL
+MoveObjLeft:
+	ld bc, OAMA_X
+	add hl, bc
+    ld a, [hl]
+    dec a
+    ld [hl], a
+	ret
+MoveObjRight:
+	ld bc, OAMA_X
+	add hl, bc
+    ld a, [hl]
+    inc a
+    ld [hl], a
+	ret
+MoveObjDown:
+	ld bc, OAMA_Y
+	add hl, bc
+    ld a, [hl]
+    inc a
+    ld [hl], a
+	ret
+MoveObjUp:
+	ld bc, OAMA_Y
+	add hl, bc
+    ld a, [hl]
+    dec a
+    ld [hl], a
 	ret
 	
 Memcopy:
