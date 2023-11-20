@@ -1,5 +1,10 @@
 INCLUDE "hardware.inc"
 
+; Box is the first object in OAM
+DEF BOX		EQU _OAMRAM
+DEF BOX_X   EQU BOX + OAMA_X
+DEF BOX_Y   EQU BOX + OAMA_Y
+
 SECTION "Header", ROM0[$100]
 
 	jp EntryPoint
@@ -20,29 +25,15 @@ WaitVBlank:
 
 	; Copy the tile data
 	ld de, Tiles
-	ld hl, $9000
+	ld hl, _VRAM9000
 	ld bc, TilesEnd - Tiles
-CopyTiles:
-	ld a, [de]
-	ld [hli], a
-	inc de
-	dec bc
-	ld a, b
-	or a, c
-	jp nz, CopyTiles
+	call Memcopy
 
 	; Copy the tilemap
 	ld de, Tilemap
-	ld hl, $9800
+	ld hl, _SCRN0
 	ld bc, TilemapEnd - Tilemap
-CopyTilemap:
-	ld a, [de]
-	ld [hli], a
-	inc de
-	dec bc
-	ld a, b
-	or a, c
-	jp nz, CopyTilemap
+	call Memcopy
 
 ; Clear the Object Attribute Memory (OAM)
 	ld a, 0	  ; We want to initialize OAM to 0. Store 0 into register a
@@ -53,17 +44,10 @@ ClearOam:
 	dec b
 	jp nz, ClearOam
  
- 	ld de, Tetronimo 
- 	ld hl, $8000 ; Address of our first non-shared tile (tile index 0)
- 	ld bc, TetronimoEnd - Tetronimo 
-CopyTetronimo:
-	ld a, [de]  	  ; Load tetronimo byte into register a
-	ld [hli], a 	  ; Load tetronimo byte into value at hl
-	inc de			  ; Point to next tetronimo byte
-	dec bc 			  ;
-	ld a, b     	  ; Load b into a to check if we've reached 0 yet
-	or a, c     	  ; Set's 0 flag if we reached 0
-	jp nz, CopyTetronimo ; Continue loop until we finished copying all tetronimo bytes
+ 	ld de, Box 
+ 	ld hl, _VRAM8000 ; Address of our first non-shared tile (tile index 0)
+ 	ld bc, BoxEnd - Box 
+	call Memcopy
 
 ; Draw the object
 	ld hl, _OAMRAM
@@ -116,42 +100,52 @@ WaitVBlank2:
 	; Move left if moveDirection = 1
 	ld a, [moveDirection]
 	cp 0
-	jp z, MoveLeft
+	call z, MoveLeft
+
+	cp 1
+	call z, MoveRight
+
+	jp Main
 
 ; Change direction to left when we reach object_0.X = $A0
 ; Change direction to right when we reach object_0.X = $07
 MoveRight:
-	ld a, [_OAMRAM + 1]
+	ld a, [BOX_X]
 	inc a
-	ld [_OAMRAM + 1], a
+	ld [BOX_X], a
 
 	cp $A0
-	jp z, SetLeft
-
-	jp Main
+	call z, SetLeft
+	ret
 
 MoveLeft:
-	ld a, [_OAMRAM + 1]
+	ld a, [BOX_X]
 	dec a
-	ld [_OAMRAM + 1], a
+	ld [BOX_X], a
 	
 	cp $08
-	jp z, SetRight
-
-	jp Main
+	call z, SetRight
+	ret
 
 SetRight:
 	ld a, 1
 	ld [moveDirection], a
-	jp Main
+	ret
 
 SetLeft:
 	ld a, 0
 	ld [moveDirection], a
-	jp Main
+	ret
 	
-
-; Tile data should always go at the end
+Memcopy:
+	ld a, [de]
+	ld [hli], a 	  ; Load byte into value at hl
+	inc de			  ; Point to next tetronimo byte
+	dec bc 			  ;
+	ld a, b     	  ; Load b into a to check if we've reached 0 yet
+	or a, c     	  ; Set's 0 flag if we reached 0
+	jp nz, Memcopy; Continue loop until we finished copying all tetronimo bytes
+	ret
 
 Tiles:
 	; $00
@@ -195,7 +189,7 @@ Tilemap:
 	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, 0,0,0,0,0,0,0,0,0,0,0,0,
 TilemapEnd:
 
-Tetronimo:
+Box:
 	dw `33333333
 	dw `31111113
 	dw `31111113
@@ -204,7 +198,7 @@ Tetronimo:
 	dw `31111113
 	dw `31111113
 	dw `33333333
-TetronimoEnd:
+BoxEnd:
 
 ; =======DECLARING GLOBAL VARIABLES=========
 SECTION "Counter", WRAM0
