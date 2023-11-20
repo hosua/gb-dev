@@ -2,6 +2,10 @@ INCLUDE "hardware.inc"
 
 SECTION "Header", ROM0[$100]
 
+DEF BRICK_LEFT EQU $05
+DEF BRICK_RIGHT EQU $06
+DEF BLANK_TILE EQU $08
+
 ; rgbds is dest, src
 ; brackes [arg] indicates a dereference, i.e., take the value stored in address arg
 
@@ -273,6 +277,7 @@ BounceOnTop:
     ld a, [hl]
     call IsWallTile
 	ret nz
+	call CheckAndHandleBrick
     ld a, 1
     ld [wBallMomentumY], a
 	ret
@@ -288,6 +293,7 @@ BounceOnRight:
     ld a, [hl]
     call IsWallTile
 	ret nz
+	call CheckAndHandleBrick
     ld a, -1
     ld [wBallMomentumX], a
 	ret
@@ -303,6 +309,7 @@ BounceOnLeft:
     ld a, [hl]
     call IsWallTile
 	ret nz
+	call CheckAndHandleBrick
     ld a, 1
     ld [wBallMomentumX], a
 	ret
@@ -318,6 +325,7 @@ BounceOnBottom:
     ld a, [hl]
     call IsWallTile
 	ret nz
+	call CheckAndHandleBrick
     ld a, -1
     ld [wBallMomentumY], a
 	ret
@@ -344,7 +352,27 @@ PaddleBounce:
     ld a, -1
     ld [wBallMomentumY], a
 	ret
-PaddleBounceDone:
+
+; Checks if a brick was collided with and breaks it if possible.
+; @param hl: address of tile.
+CheckAndHandleBrick:
+    ld a, [hl]
+    cp a, BRICK_LEFT
+    jr nz, CheckAndHandleBrickRight
+    ; Break a brick from the left side.
+    ld [hl], BLANK_TILE
+    inc hl
+    ld [hl], BLANK_TILE
+	ret
+
+CheckAndHandleBrickRight:
+    cp a, BRICK_RIGHT
+    ret nz
+    ; Break a brick from the right side.
+    ld [hl], BLANK_TILE
+    dec hl
+    ld [hl], BLANK_TILE
+    ret
 
 Memcopy:
 	ld a, [de]
