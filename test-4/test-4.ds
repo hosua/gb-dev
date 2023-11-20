@@ -154,6 +154,9 @@ HandleMovementEnd:
 	cp $98
 	call nz, MoveTetronimoDown
 
+	call GetMinMaxX
+	call GetMinMaxY
+
 	jp Main
 
 ZeroMoveDelay:
@@ -164,6 +167,86 @@ ZeroMoveDelay:
 SetMoveDelay:
 	ld a, MOVEDELAY
 	ld [wMoveDelay], a
+	ret
+
+; Store b = min_x, c = max_y
+GetMinMaxX:
+	ld a, [BOX1 + OAMA_X]
+	ld b, a
+	ld c, a
+
+	ld a, [BOX2 + OAMA_X]
+	cp b
+	jp nc, .gminmaxx1
+	; store min in b
+	ld b, a
+.gminmaxx1:
+	cp c
+	jp c, .gminmaxx2
+	; store max in c
+	ld c, a
+.gminmaxx2:
+
+	ld a, [BOX3 + OAMA_X]
+	cp b
+	jp nc, .gminmaxx3
+	; store min in b
+	ld b, a
+.gminmaxx3
+	cp c
+	jp c, .gminmaxx4
+	; store max in c
+	ld c, a
+.gminmaxx4
+	ld a, [BOX4 + OAMA_X]
+	cp b
+	ret nc
+	; store min in b
+	ld b, a
+	cp c
+	ret c
+	; store max in c
+	ld c, a
+	ret
+
+; Store b = min_y, c = max_y
+GetMinMaxY:
+	ld a, [BOX1 + OAMA_Y]
+	ld b, a
+	ld c, a
+
+	ld a, [BOX2 + OAMA_Y]
+	cp b
+	jp nc, .gminmaxy1
+	; store min in b
+	ld b, a
+.gminmaxy1:
+	cp c
+	jp c, .gminmaxy2
+	; store max in c
+	ld c, a
+.gminmaxy2:
+
+	ld a, [BOX3 + OAMA_Y]
+	cp b
+	jp nc, .gminmaxy3
+	; store min in b
+	ld b, a
+.gminmaxy3
+	cp c
+	jp c, .gminmaxy4
+	; store max in c
+	ld c, a
+.gminmaxy4
+	ld a, [BOX4 + OAMA_X]
+	cp b
+	ret nc
+	; store min in b
+	ld b, a
+	cp c
+	ret c
+	; store max in c
+	ld c, a
 	ret
 
 CheckLeft:
@@ -196,43 +279,6 @@ CheckDown:
 	ret z
 	call SetMoveDelay
 	call MoveTetronimoDown
-	ret
-
-UpdateKeys:
-	; Poll half the controller
-	ld a, P1F_GET_BTN
-	call .onenibble
-	ld b, a ; B7-4 = 1; B3-0 = unpressed buttons
-	
-	; Poll the other half
-	ld a, P1F_GET_DPAD
-	call .onenibble
-	swap a ; A3-0 = unpressed directions; A7-4 = 1
-	xor a, b ; A = pressed buttons + directions
-	ld b, a ; B = pressed buttons + directions
-	
-	; And release the controller
-	ld a, P1F_GET_NONE
-	ldh [rP1], a
-	
-	; Combine with previous wCurKeys to make wNewKeys
-	ld a, [wCurKeys]
-	xor a, b ; A = keys that changed state
-	and a, b ; A = keys that changed to pressed
-	ld [wNewKeys], a
-	ld a, b
-	ld [wCurKeys], a
-	ret
-
-.onenibble
-	ldh [rP1], a ; switch the key matrix
-	call .knownret ; burn 10 cycles calling a known ret
-	; -- No idea what the extra ldh are doing --
-	; ldh a, [rP1] ; ignore value while waiting for the key matrix to settle
-	; ldh a, [rP1]
-	ldh a, [rP1] ; this read counts
-	or a, $F0 ; A7-4 = 1; A3-0 = unpressed keys
-.knownret
 	ret
 
 MoveTetronimoDown:
@@ -325,115 +371,8 @@ DrawPlayfield:
 
 	ret
 
-Tiles:
-	; $00
-	dw `00000000
-	dw `00000000
-	dw `00000000
-	dw `00000000
-	dw `00000000
-	dw `00000000
-	dw `00000000
-	dw `00000000
-	; $01
-	dw `33333333
-	dw `33333333
-	dw `33333333
-	dw `33333333
-	dw `33333333
-	dw `33333333
-	dw `33333333
-	dw `33333333
-	; $02
-	dw `33333333
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `33333333
-	; $03
-	dw `33333333
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	; $04
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	; $05
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `33333333
-TilesEnd:
-
-Tilemap:
-	db $03, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $03, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $04, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $04, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-	db $05, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $05, $01, $01, $01, $01, $01, $01, $01, $01, 0,0,0,0,0,0,0,0,0,0,0,0,
-TilemapEnd:
-
-EmptyPlayfield:
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $01, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $01, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $01, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-EmptyPlayfieldEnd:
-
-Box:
-	dw `33333333
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `31111113
-	dw `33333333
-BoxEnd:
+INCLUDE "input.inc"
+INCLUDE "tiledata.inc"
 
 ; =======DECLARING GLOBAL VARIABLES=========
 SECTION "Counter", WRAM0
