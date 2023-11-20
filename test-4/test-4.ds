@@ -9,7 +9,13 @@ DEF BOX4			EQU _OAMRAM + 12
 DEF _PLAYFIELD      EQU $C0B0 
 DEF _PLAYFIELD_END  EQU $C164
 
-DEF MOVEDELAY 		EQU $5
+DEF PLAYFIELD_OFFSET_X		EQU 1  ; Number of tiles that fill the left of the playfield
+DEF PLAYFIELD_LEFT_BORDER   EQU 1 + PLAYFIELD_OFFSET_X
+DEF PLAYFIELD_RIGHT_BORDER  EQU 10 + PLAYFIELD_OFFSET_X
+DEF PLAYFIELD_TOP_BORDER    EQU 2  ; top row of playfield (not accounting for pixel scaling)
+DEF PLAYFIELD_BOTTOM_BORDER EQU 19 ; bottom row of playfield (not accounting for pixel scaling)
+
+DEF MOVEDELAY 		EQU 5
 
 SECTION "Header", ROM0[$100]
 
@@ -136,10 +142,25 @@ WaitVBlank2:
 
 HandleMovement:
 	call UpdateKeys
-	call CheckUp
-	call CheckDown
-	call CheckLeft
-	call CheckRight
+	call GetMinMaxY
+
+	ld a, b
+	cp PLAYFIELD_TOP_BORDER
+	call nz, CheckUp ; this is for testing, in tetris we wouldn't want to move our piece up
+
+	ld a, c
+	cp PLAYFIELD_BOTTOM_BORDER
+	call nz, CheckDown
+
+	call GetMinMaxX
+
+	ld a, b
+	cp PLAYFIELD_LEFT_BORDER
+	call nz, CheckLeft
+	
+	ld a, c
+	cp PLAYFIELD_RIGHT_BORDER
+	call nz, CheckRight
 HandleMovementEnd:
 
 	ld a, [wFrameCounter]
@@ -149,13 +170,12 @@ HandleMovementEnd:
 	; reset frame counter to 0
 	ld a, 0
 	ld [wFrameCounter], a
-	
-	ld a, [BOX4 + OAMA_Y]
-	cp $98
-	call nz, MoveTetronimoDown
-
-	call GetMinMaxX
+	; store b=y_min, c=y_max	
 	call GetMinMaxY
+	; check if any blocks of the tetronimo are at the bottom of the playfield
+	ld a, c
+	cp PLAYFIELD_BOTTOM_BORDER
+	call nz, MoveTetronimoDown
 
 	jp Main
 
@@ -169,7 +189,7 @@ SetMoveDelay:
 	ld [wMoveDelay], a
 	ret
 
-; Store b = min_x, c = max_y
+; Store b = min_x, c = max_y (stores the grid position, not pixel position)
 GetMinMaxX:
 	ld a, [BOX1 + OAMA_X]
 	ld b, a
@@ -200,16 +220,24 @@ GetMinMaxX:
 .gminmaxx4
 	ld a, [BOX4 + OAMA_X]
 	cp b
-	ret nc
+	jp nc, .gminmaxx5
 	; store min in b
 	ld b, a
+.gminmaxx5
 	cp c
-	ret c
+	jp c, .gminmaxx6
 	; store max in c
 	ld c, a
+.gminmaxx6
+	srl b ; b / 2
+	srl b ; b / 4
+	srl b ; b / 8
+	srl c ; c / 2
+	srl c ; c / 4
+	srl c ; c / 8
 	ret
 
-; Store b = min_y, c = max_y
+; Store b = min_y, c = max_y (stores grid position, not pixel position)
 GetMinMaxY:
 	ld a, [BOX1 + OAMA_Y]
 	ld b, a
@@ -240,13 +268,21 @@ GetMinMaxY:
 .gminmaxy4
 	ld a, [BOX4 + OAMA_X]
 	cp b
-	ret nc
+	jp nc, .gminmaxy5
 	; store min in b
 	ld b, a
+.gminmaxy5
 	cp c
-	ret c
+	jp c, .gminmaxy6
 	; store max in c
 	ld c, a
+.gminmaxy6
+	srl b ; b / 2
+	srl b ; b / 4
+	srl b ; b / 8
+	srl c ; c / 2
+	srl c ; c / 4
+	srl c ; c / 8
 	ret
 
 CheckLeft:
