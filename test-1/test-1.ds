@@ -68,7 +68,7 @@ CopyTetronimo:
 ; Draw the object
 	ld hl, _OAMRAM
 	ld a, 128 + 16 
-	ld [hli], a    ; Store the object's Y valueS
+	ld [hli], a    ; Store the object's Y value
 	ld a, 16 + 8   ; 
 	ld [hli], a    ; Store the object's X value
 	ld a, 0		   ; Store 0 in register a
@@ -88,6 +88,7 @@ CopyTetronimo:
 	; Initialize wFrameCounter=0
 	ld a, 0
 	ld [wFrameCounter], a
+	ld [moveDirection], a
 
 Main: 
 	; Wait until it's *not* VBlank
@@ -112,11 +113,41 @@ WaitVBlank2:
 	ld a, 0
 	ld [wFrameCounter], a
 
-	; =============MOVEMENT LOGIC==============
-	; Move the tetronimo one pixel to the right
+	; Move left if moveDirection = 1
+	ld a, [moveDirection]
+	cp 0
+	jp z, MoveLeft
+
+; Change direction to left when we reach object_0.X = $A0
+; Change direction to right when we reach object_0.X = $07
+MoveRight:
 	ld a, [_OAMRAM + 1]
 	inc a
 	ld [_OAMRAM + 1], a
+
+	cp $A0
+	jp z, SetLeft
+
+	jp Main
+
+MoveLeft:
+	ld a, [_OAMRAM + 1]
+	dec a
+	ld [_OAMRAM + 1], a
+	
+	cp $08
+	jp z, SetRight
+
+	jp Main
+
+SetRight:
+	ld a, 1
+	ld [moveDirection], a
+	jp Main
+
+SetLeft:
+	ld a, 0
+	ld [moveDirection], a
 	jp Main
 	
 
@@ -178,3 +209,4 @@ TetronimoEnd:
 ; =======DECLARING GLOBAL VARIABLES=========
 SECTION "Counter", WRAM0
 wFrameCounter: db
+moveDirection: db
