@@ -123,6 +123,3 @@ MoveObjUp:
 	sub a, 8
     ld [hl], a
 	ret
-
-SECTION "Input Variables", WRAM0
-moveFlag: db
