@@ -1,0 +1,473 @@
+INCLUDE "hardware.inc"
+
+; Box is the first object in OAM
+DEF BOX1			EQU _OAMRAM
+DEF BOX2			EQU _OAMRAM + 4
+DEF BOX3			EQU _OAMRAM + 8
+DEF BOX4			EQU _OAMRAM + 12
+
+DEF _PLAYFIELD      EQU $C0B0 
+DEF _PLAYFIELD_END  EQU $C164
+
+DEF PLAYFIELD_OFFSET_X		EQU 1  ; Number of tiles that fill the left of the playfield
+DEF PLAYFIELD_LEFT_BORDER   EQU 1 + PLAYFIELD_OFFSET_X
+DEF PLAYFIELD_RIGHT_BORDER  EQU 10 + PLAYFIELD_OFFSET_X
+DEF PLAYFIELD_TOP_BORDER    EQU 2  ; top row of playfield (not accounting for pixel scaling)
+DEF PLAYFIELD_BOTTOM_BORDER EQU 19 ; bottom row of playfield (not accounting for pixel scaling)
+
+DEF PLACED_TILE	EQU $06
+
+DEF MOVEDELAY 		EQU 5
+
+SECTION "Header", ROM0[$100]
+
+	jp EntryPoint
+
+	ds $150 - @, 0 ; Make room for the header
+
+EntryPoint:
+	; Program starts here
+
+WaitVBlank:
+	ld a, [rLY]
+	cp 144 
+	jp c, WaitVBlank 
+
+	; Turn the LCD off
+	ld a, 0
+	ld [rLCDC], a
+
+	; Copy the tile data
+	ld de, Tiles
+	ld hl, _VRAM9000
+	ld bc, TilesEnd - Tiles
+	call Memcopy
+
+	; Copy the tilemap
+	ld de, Tilemap
+	; https://gbdev.io/pandocs/Tile_Maps.html
+	ld hl, _SCRN0
+	ld bc, TilemapEnd - Tilemap
+	call Memcopy
+
+; Clear the entire Object Attribute Memory (OAM)
+	ld a, 0	  ; We want to initialize OAM to 0. Store 0 into register a
+	ld b, 160 ; OAM is always 160 bytes long, store this size into register b
+	ld hl, _OAMRAM ; store the _OAMRAM register address into hl
+ClearOam:
+	ld [hli], a ; Fill the current OAM byte with 0 (we stored 0 into register a earlier)
+	dec b
+	jp nz, ClearOam
+ 
+ 	ld de, Box 
+ 	ld hl, _VRAM8000 ; Address of our first non-shared tile (tile index 0)
+ 	ld bc, BoxEnd - Box 
+	call Memcopy
+
+; Initialize the object
+	ld hl, BOX1
+	ld a, 0 + 16 
+	ld [BOX1 + OAMA_Y], a     ; Store the object's Y value
+	ld a, 48 + 8   ; 
+	ld [BOX1 + OAMA_X], a     ; Store the object's X value
+	ld a, 0		   
+	ld [BOX1 + OAMA_TILEID], a ; Set Object's Tile ID to 0
+	ld [BOX1 + OAMA_FLAGS], a ; Set Object's Attributes to 0
+
+	ld hl, BOX2
+	ld a, 0 + 16 
+	ld [BOX2 + OAMA_Y], a      ; Store the object's Y value
+	ld a, 56 + 8   
+	ld [BOX2 + OAMA_X], a      ; Store the object's X value
+	ld a, 0		               
+	ld [BOX2 + OAMA_TILEID], a ; Set Object's Tile ID to 0
+	ld [BOX2 + OAMA_FLAGS], a  ; Set Object's Attributes to 0
+
+	ld hl, BOX3
+	ld a, 8 + 16 
+	ld [BOX3 + OAMA_Y], a      ; Store the object's Y value
+	ld a, 48 + 8   
+	ld [BOX3 + OAMA_X], a      ; Store the object's X value
+	ld a, 0		               
+	ld [BOX3 + OAMA_TILEID], a ; Set Object's Tile ID to 0
+	ld [BOX3 + OAMA_FLAGS], a  ; Set Object's Attributes to 0
+
+	ld hl, BOX4
+	ld a, 8 + 16 
+	ld [BOX4 + OAMA_Y], a      ; Store the object's Y value
+	ld a, 56 + 8   ; 
+	ld [BOX4 + OAMA_X], a      ; Store the object's X value
+	ld a, 0		   
+	ld [BOX4 + OAMA_TILEID], a ; Set Object's Tile ID to 0
+	ld [BOX4 + OAMA_FLAGS], a  ; Set Object's Attributes to 0
+
+; Turn the LCD on, with objects enabled
+	ld a, LCDCF_ON | LCDCF_BGON | LCDCF_OBJON
+	ld [rLCDC], a ; Store flags stored into a into our rLCDC register
+
+	; During the first (blank) frame, initialize the display registers
+	ld a, %11100100
+	ld [rBGP], a    ; rBGP -- register for background palette data
+	ld a, %11100100
+	ld [rOBP0], a   ; r0BP0 -- register for Object palette data 0 -- what does this mean??
+	
+	; Initialize wFrameCounter=0
+	ld a, 0
+	ld [wFrameCounter], a
+	ld [moveDirection], a
+	ld [wMoveDelay], a
+
+Main: 
+	; Wait until it's *not* VBlank
+	ld a, [rLY] ; register for LCDC Y-Coordinate
+	cp 144      ; compare register a-144
+	jp nc, Main ; Repeat main loop while a < 144
+
+WaitVBlank2:
+	ld a, [rLY]
+	cp 144
+	jp c, WaitVBlank2
+	
+	; inc frame counter
+	ld a, [wFrameCounter]
+	inc a
+	ld [wFrameCounter], a
+
+	ld a, [wMoveDelay]
+	sub a, $1	; we're not using dec here because it wouldn't set the carry flag
+	ld [wMoveDelay], a
+	call c, ZeroMoveDelay
+
+	ld a, [wMoveDelay]
+	cp 0
+	jp nz, HandleMovementEnd
+
+HandleMovement:
+	call UpdateKeys
+	call GetMinMaxY
+	call CheckInputUp 
+	call CheckInputDown
+
+	call GetMinMaxX
+	call CheckInputLeft
+	call CheckInputRight
+HandleMovementEnd:
+
+	ld a, [wFrameCounter]
+	cp 15
+	jp nz, Main
+	
+	; reset frame counter to 0
+	ld a, 0
+	ld [wFrameCounter], a
+	; store b=y_min, c=y_max	
+	call GetMinMaxY
+	
+	ld hl, BOX4
+	call CheckTileBelow
+	cp PLACED_TILE
+	jp z, Main
+
+	; check if any blocks of the tetronimo are at the bottom of the playfield
+	ld a, c
+	cp PLAYFIELD_BOTTOM_BORDER
+	call nz, MoveTetronimoDown
+
+
+	jp Main
+
+; @param b: X
+; @param c: Y
+; @return hl: tile address = _SCRN0 + X + Y*32
+GetTile:
+	ld a, c ; y pos
+	ld l, a ; store y pos in right half of hl
+	ld h, 0 ; make sure h is zeroed out	
+
+	; Here, we need to multiply Y by 32 because every row has 32 tiles (only 20
+	; are shown, but there are actually 32)
+
+	; now we have position on the grid * 8
+	add hl, hl ; * 16
+	add hl, hl ; * 32
+	; Now we have hl = y_pos * 32
+
+	ld a, b   ; x pos * 8
+	srl a     ; / 2
+	srl a     ; / 4
+	srl a     ; / 8
+	; a = x_pos
+	
+	ld e, a
+	ld a, 0
+	ld d, a
+	add hl, de ; now we have hl = x_pos + y_pos * 32
+	ld de, _SCRN0
+	add hl, de ; hl = _SCRN0 + x_pos + y_pos * 32
+	ret
+
+; @param: hl: address of object
+CheckTileBelow:
+	; hl = OBJ
+
+	ld a, [hli] ; OBJ_Y
+	sub a, 8    ; -- I am not really sure why the OAM offset isn't applying for Y here. --
+	ld c, a
+
+	ld a, [hl]  ; OBJ_X
+	sub a, 8        
+	ld b, a
+	call GetTile
+	ld a, [hl]
+	cp PLACED_TILE
+
+	ret
+
+
+ZeroMoveDelay:
+	ld a, $0
+	ld [wMoveDelay], a
+	ret
+
+SetMoveDelay:
+	ld a, MOVEDELAY
+	ld [wMoveDelay], a
+	ret
+
+; Store b = min_x, c = max_y (stores the grid position, not pixel position)
+GetMinMaxX:
+	ld a, [BOX1 + OAMA_X]
+	ld b, a
+	ld c, a
+	ld a, [BOX2 + OAMA_X]
+	cp b
+	jp nc, .gminmaxx1
+	; store min in b
+	ld b, a
+.gminmaxx1:
+	cp c
+	jp c, .gminmaxx2
+	; store max in c
+	ld c, a
+.gminmaxx2:
+	ld a, [BOX3 + OAMA_X]
+	cp b
+	jp nc, .gminmaxx3
+	; store min in b
+	ld b, a
+.gminmaxx3
+	cp c
+	jp c, .gminmaxx4
+	; store max in c
+	ld c, a
+.gminmaxx4
+	ld a, [BOX4 + OAMA_X]
+	cp b
+	jp nc, .gminmaxx5
+	; store min in b
+	ld b, a
+.gminmaxx5
+	cp c
+	jp c, .gminmaxx6
+	; store max in c
+	ld c, a
+.gminmaxx6
+	srl b ; b / 2
+	srl b ; b / 4
+	srl b ; b / 8
+	srl c ; c / 2
+	srl c ; c / 4
+	srl c ; c / 8
+	ret
+
+; Store b = min_y, c = max_y (stores grid position, not pixel position)
+GetMinMaxY:
+	ld a, [BOX1 + OAMA_Y]
+	ld b, a
+	ld c, a
+
+	ld a, [BOX2 + OAMA_Y]
+	cp b
+	jp nc, .gminmaxy1
+	; store min in b
+	ld b, a
+.gminmaxy1:
+	cp c
+	jp c, .gminmaxy2
+	; store max in c
+	ld c, a
+.gminmaxy2:
+	ld a, [BOX3 + OAMA_Y]
+	cp b
+	jp nc, .gminmaxy3
+	; store min in b
+	ld b, a
+.gminmaxy3
+	cp c
+	jp c, .gminmaxy4
+	; store max in c
+	ld c, a
+.gminmaxy4
+	ld a, [BOX4 + OAMA_X]
+	cp b
+	jp nc, .gminmaxy5
+	; store min in b
+	ld b, a
+.gminmaxy5
+	cp c
+	jp c, .gminmaxy6
+	; store max in c
+	ld c, a
+.gminmaxy6
+	srl b ; b / 2
+	srl b ; b / 4
+	srl b ; b / 8
+	srl c ; c / 2
+	srl c ; c / 4
+	srl c ; c / 8
+	ret
+
+CheckInputLeft:
+	ld a, b
+	cp PLAYFIELD_LEFT_BORDER
+	ret z
+
+    ld a, [wCurKeys]
+    and a, PADF_LEFT
+	ret z
+	call SetMoveDelay
+	call MoveTetronimoLeft
+	ret
+
+CheckInputRight:
+	ld a, b
+	cp PLAYFIELD_RIGHT_BORDER
+	ret z
+
+    ld a, [wCurKeys]
+    and a, PADF_RIGHT
+	ret z
+	call SetMoveDelay
+	call MoveTetronimoRight
+	ret
+
+CheckInputUp:
+	ld a, b
+	cp PLAYFIELD_TOP_BORDER
+	ret z
+
+	ld a, [wCurKeys]
+	and a, PADF_UP
+	ret z
+	call SetMoveDelay
+	call MoveTetronimoUp
+	ret
+
+CheckInputDown:
+	ld a, c
+	cp PLAYFIELD_BOTTOM_BORDER
+	ret z
+
+	ld a, [wCurKeys]
+	and a, PADF_DOWN
+	ret z
+	call SetMoveDelay
+	call MoveTetronimoDown
+	ret
+
+MoveTetronimoDown:
+	ld hl, BOX1		
+	call MoveObjDown
+	ld hl, BOX2
+	call MoveObjDown
+	ld hl, BOX3
+	call MoveObjDown
+	ld hl, BOX4
+	call MoveObjDown
+	ret
+
+MoveTetronimoLeft:
+	ld hl, BOX1		
+	call MoveObjLeft
+	ld hl, BOX2
+	call MoveObjLeft
+	ld hl, BOX3
+	call MoveObjLeft
+	ld hl, BOX4
+	call MoveObjLeft
+	ret
+
+MoveTetronimoRight:
+	ld hl, BOX1		
+	call MoveObjRight
+	ld hl, BOX2
+	call MoveObjRight
+	ld hl, BOX3
+	call MoveObjRight
+	ld hl, BOX4
+	call MoveObjRight
+	ret
+
+MoveTetronimoUp:
+	ld hl, BOX1		
+	call MoveObjUp
+	ld hl, BOX2
+	call MoveObjUp
+	ld hl, BOX3
+	call MoveObjUp
+	ld hl, BOX4
+	call MoveObjUp
+	ret
+
+; Before calling these move functions, load the object addr into register HL
+MoveObjLeft:
+	ld bc, OAMA_X
+	add hl, bc
+    ld a, [hl]
+    sub a, 8
+    ld [hl], a
+	ret
+MoveObjRight:
+	ld bc, OAMA_X
+	add hl, bc
+    ld a, [hl]
+	add a, 8
+    ld [hl], a
+	ret
+MoveObjDown:
+	ld bc, OAMA_Y
+	add hl, bc
+    ld a, [hl]
+	add a, 8
+    ld [hl], a
+	ret
+MoveObjUp:
+	ld bc, OAMA_Y
+	add hl, bc
+    ld a, [hl]
+	sub a, 8
+    ld [hl], a
+	ret
+	
+Memcopy:
+	ld a, [de]
+	ld [hli], a 	  ; Load byte into value at hl
+	inc de			  ; Point to next tetronimo byte
+	dec bc 			  ;
+	ld a, b     	  ; Load b into a to check if we've reached 0 yet
+	or a, c     	  ; Set's 0 flag if we reached 0
+	jp nz, Memcopy; Continue loop until we finished copying all tetronimo bytes
+	ret
+
+INCLUDE "input.inc"
+INCLUDE "tiledata.inc"
+
+; =======DECLARING GLOBAL VARIABLES=========
+SECTION "Counter", WRAM0
+wFrameCounter: db
+moveDirection: db
+wMoveDelay: db
+
+SECTION "Input Variables", WRAM0
+wCurKeys: db
+wNewKeys: db
