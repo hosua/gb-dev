@@ -1,0 +1,185 @@
+INCLUDE "hardware.inc"
+
+; Each box represents the memory address of each individual piece in the falling tetronimo
+DEF BOX1					EQU _OAMRAM
+DEF BOX2					EQU _OAMRAM + 4
+DEF BOX3					EQU _OAMRAM + 8
+DEF BOX4					EQU _OAMRAM + 12
+
+DEF ORIGIN_START_X			EQU 32 + 16
+DEF ORIGIN_START_Y			EQU 0 + 8
+
+DEF BOX_OBJ_TILE 			EQU $80
+DEF EMPTY_OBJ_TILE 			EQU $81
+DEF BOX_TILE_ADDR			EQU _VRAM8000 + $80
+DEF EMPTY_TILE_ADDR			EQU _VRAM8000 + $81
+
+
+DEF _PLAYFIELD      		EQU $C0B0 
+DEF _PLAYFIELD_END  		EQU $C164
+
+DEF PLAYFIELD_OFFSET_X		EQU 1  ; Number of tiles that fill the left of the playfield
+DEF PLAYFIELD_LEFT_BORDER   EQU 1 + PLAYFIELD_OFFSET_X
+DEF PLAYFIELD_RIGHT_BORDER  EQU 10 + PLAYFIELD_OFFSET_X
+DEF PLAYFIELD_TOP_BORDER    EQU 2  ; top row of playfield (not accounting for pixel scaling)
+DEF PLAYFIELD_BOTTOM_BORDER EQU 19 ; bottom row of playfield (not accounting for pixel scaling)
+
+DEF MOVEDELAY 				EQU 5
+
+SECTION "Header", ROM0[$100]
+
+	jp EntryPoint
+
+	ds $150 - @, 0 ; Make room for the header
+
+EntryPoint:
+	; Program starts here
+
+WaitVBlank:
+	ld a, [rLY]
+	cp 144 
+	jp c, WaitVBlank 
+
+	; Turn the LCD off
+	ld a, 0
+	ld [rLCDC], a
+
+	; Copy the tile data
+	ld de, Tiles
+	ld hl, _VRAM9000
+	ld bc, TilesEnd - Tiles
+	call Memcopy
+
+	; Copy the tilemap
+	ld de, Tilemap
+	ld hl, _SCRN0
+	ld bc, TilemapEnd - Tilemap
+	call Memcopy
+
+; Clear the entire Object Attribute Memory (OAM)
+	ld a, 0	  ; We want to initialize OAM to 0. Store 0 into register a
+	ld b, 160 ; OAM is always 160 bytes long, store this size into register b
+	ld hl, _OAMRAM ; store the _OAMRAM register address into hl
+ClearOam:
+	ld [hli], a ; Fill the current OAM byte with 0 (we stored 0 into register a earlier)
+	dec b
+	jp nz, ClearOam
+ 
+ 	ld de, Box 
+ 	ld hl, $8800 ; Address of our first non-shared tile (tile index 0)
+ 	ld bc, BoxEnd - Box 
+	call Memcopy
+	
+	call InitOrigin ; set origin to start position
+	; call InitBoxes  ; zero out the OAM objects
+
+; Turn the LCD on, with objects enabled
+	ld a, LCDCF_ON | LCDCF_BGON | LCDCF_OBJON
+	ld [rLCDC], a ; Store flags stored into a into our rLCDC register
+
+	; During the first (blank) frame, initialize the display registers
+	ld a, %11100100
+	ld [rBGP], a    ; rBGP -- register for background palette data
+	ld a, %11100100
+	ld [rOBP0], a   ; r0BP0 -- register for Object palette data 0 -- what does this mean??
+	
+	; Initialize vars to 0
+	ld a, 0
+	ld [wFrameCounter], a
+	ld [moveDirection], a
+	ld [wMoveDelay], a
+
+Main: 
+	; Wait until it's *not* VBlank
+	ld a, [rLY] ; register for LCDC Y-Coordinate
+	cp 144      ; compare register a-144
+	jp nc, Main ; Repeat main loop while a < 144
+
+WaitVBlank2:
+	ld a, [rLY]
+	cp 144
+	jp c, WaitVBlank2
+	
+	; inc frame counter
+	ld a, [wFrameCounter]
+	inc a
+	ld [wFrameCounter], a
+
+	ld a, [wMoveDelay]
+	sub a, $1	; we're not using dec here because it wouldn't set the carry flag
+	ld [wMoveDelay], a
+	call c, ZeroMoveDelay
+
+	ld a, [wMoveDelay]
+	cp 0
+	jp nz, HandleMovementEnd
+
+HandleMovement:
+	call UpdateKeys
+	call CheckInputAll
+HandleMovementEnd:
+
+	call CalcPos_O
+
+	ld a, [wFrameCounter] ; Only execute code below every 15 frames
+	cp 15
+	jp nz, Main
+
+	
+	; reset frame counter to 0
+	ld a, 0
+	ld [wFrameCounter], a
+	
+	ld hl, BOX3
+	call CheckAllTilesBelow
+	jp z, Main
+
+	; check if any blocks of the falling tetronimo are at the bottom of the playfield
+	call GetMinMaxY
+	ld a, c
+	cp PLAYFIELD_BOTTOM_BORDER
+	; call nz, MoveOriginDown
+
+	jp Main
+
+
+INCLUDE "collision.inc"
+
+ZeroMoveDelay:
+	ld a, $0
+	ld [wMoveDelay], a
+	ret
+
+SetMoveDelay:
+	ld a, MOVEDELAY
+	ld [wMoveDelay], a
+	ret
+	
+Memcopy:
+	ld a, [de]
+	ld [hli], a 	  ; Load byte into value at hl
+	inc de			  ; Point to next tetronimo byte
+	dec bc 			  ;
+	ld a, b     	  ; Load b into a to check if we've reached 0 yet
+	or a, c     	  ; Set's 0 flag if we reached 0
+	jp nz, Memcopy; Continue loop until we finished copying all tetronimo bytes
+	ret
+
+INCLUDE "tetronimo.inc"
+INCLUDE "movement.inc"
+INCLUDE "input.inc"
+INCLUDE "tiledata.inc"
+
+; =======DECLARING GLOBAL VARIABLES=========
+SECTION "Counter", WRAM0
+wFrameCounter: db
+moveDirection: db
+wMoveDelay: db
+
+SECTION "Input Variables", WRAM0
+wCurKeys: db
+wNewKeys: db
+
+SECTION "Tetronimo Variables", WRAM0
+originX: db
+originY: db
