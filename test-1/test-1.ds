@@ -107,13 +107,12 @@ WaitVBlank2:
 
 	jp Main
 
-; Change direction to left when we reach object_0.X = $A0
-; Change direction to right when we reach object_0.X = $07
 MoveRight:
 	ld a, [BOX_X]
 	inc a
 	ld [BOX_X], a
 
+	; Change direction to left when we reach object_0.X = $A0
 	cp $A0
 	call z, SetLeft
 	ret
@@ -123,7 +122,8 @@ MoveLeft:
 	dec a
 	ld [BOX_X], a
 	
-	cp $08
+	; Change direction to right when we reach object_0.X = $07
+	cp $07
 	call z, SetRight
 	ret
 

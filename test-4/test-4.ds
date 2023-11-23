@@ -194,7 +194,6 @@ GetMinMaxX:
 	ld a, [BOX1 + OAMA_X]
 	ld b, a
 	ld c, a
-
 	ld a, [BOX2 + OAMA_X]
 	cp b
 	jp nc, .gminmaxx1
@@ -206,7 +205,6 @@ GetMinMaxX:
 	; store max in c
 	ld c, a
 .gminmaxx2:
-
 	ld a, [BOX3 + OAMA_X]
 	cp b
 	jp nc, .gminmaxx3
@@ -254,7 +252,6 @@ GetMinMaxY:
 	; store max in c
 	ld c, a
 .gminmaxy2:
-
 	ld a, [BOX3 + OAMA_Y]
 	cp b
 	jp nc, .gminmaxy3
@@ -401,12 +398,6 @@ Memcopy:
 	jp nz, Memcopy; Continue loop until we finished copying all tetronimo bytes
 	ret
 
-DrawPlayfield:
-	ld hl, _PLAYFIELD
-	ld bc, _PLAYFIELD_END - _PLAYFIELD
-
-	ret
-
 INCLUDE "input.inc"
 INCLUDE "tiledata.inc"
 
@@ -419,5 +410,3 @@ wMoveDelay: db
 SECTION "Input Variables", WRAM0
 wCurKeys: db
 wNewKeys: db
-
-SECTION "Playfield", WRAM0

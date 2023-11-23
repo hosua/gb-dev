@@ -1,66 +1,61 @@
 CheckInputAll:
-	call GetMinMaxY
-	ld a, 0
-	cp 0
-	call CheckInputUp
-	call z, CheckInputDown
-	
 	call GetMinMaxX
-	ld a, 0
-	cp 0
-	call z, CheckInputRight
-	call z, CheckInputLeft
-	ret
-
 CheckInputLeft:
-	ld a, b
-	cp PLAYFIELD_LEFT_BORDER
-	ret z
 
     ld a, [wCurKeys]
     and a, PADF_LEFT
-	ret z
+	jp z, CheckInputRight
+
 	call SetMoveDelay
-	call CheckAllTilesLeft
-	call nz, MoveTetronimoLeft
-	ret
+	call CheckAllTilesLeft ; z set if empty below
+	call z, MoveOriginLeft ; can move if empty
+	ret z ; don't move more than once per tick
+CheckInputLeftEnd:
 
 CheckInputRight:
-	ld a, b
-	cp PLAYFIELD_RIGHT_BORDER
-	ret z
 
     ld a, [wCurKeys]
     and a, PADF_RIGHT
-	ret z
+	jp z, CheckInputUp
+
 	call SetMoveDelay
 	call CheckAllTilesRight
-	call nz, MoveTetronimoRight
-	ret
+	call z, MoveOriginRight
+	ret z
+CheckInputRightEnd:
 
 CheckInputUp:
-	ld a, b
-	cp PLAYFIELD_TOP_BORDER
-	ret z
 
 	ld a, [wCurKeys]
 	and a, PADF_UP
-	ret z
+	jp z, CheckInputDown
+
+	call GetMinMaxY
+	ld a, b
+	cp PLAYFIELD_TOP_BORDER
+	jp z, CheckInputUpEnd
+
 	call SetMoveDelay
-	call MoveTetronimoUp
-	ret
+	call CheckAllTilesAbove
+	call z, MoveOriginUp
+	ret z
+CheckInputUpEnd:
 
 CheckInputDown:
-	ld a, c
-	cp PLAYFIELD_BOTTOM_BORDER
-	ret z
 
 	ld a, [wCurKeys]
 	and a, PADF_DOWN
 	ret z
+
+	call GetMinMaxY
+	ld a, c
+	cp PLAYFIELD_BOTTOM_BORDER
+	jp z, CheckInputDownEnd
+
 	call SetMoveDelay
 	call CheckAllTilesBelow
-	call nz, MoveTetronimoDown
+	call z, MoveOriginDown
+CheckInputDownEnd:
 	ret
 
 UpdateKeys:

@@ -6,6 +6,15 @@ DEF BOX2					EQU _OAMRAM + 4
 DEF BOX3					EQU _OAMRAM + 8
 DEF BOX4					EQU _OAMRAM + 12
 
+DEF ORIGIN_START_X			EQU 32 + 16
+DEF ORIGIN_START_Y			EQU 0 + 8
+
+DEF BOX_OBJ_TILE 			EQU $80
+DEF EMPTY_OBJ_TILE 			EQU $81
+DEF BOX_TILE_ADDR			EQU _VRAM8000 + $80
+DEF EMPTY_TILE_ADDR			EQU _VRAM8000 + $81
+
+
 DEF _PLAYFIELD      		EQU $C0B0 
 DEF _PLAYFIELD_END  		EQU $C164
 
@@ -57,46 +66,12 @@ ClearOam:
 	jp nz, ClearOam
  
  	ld de, Box 
- 	ld hl, _VRAM8000 ; Address of our first non-shared tile (tile index 0)
+ 	ld hl, $8800 ; Address of our first non-shared tile (tile index 0)
  	ld bc, BoxEnd - Box 
 	call Memcopy
-
-; Initialize the object
-	ld hl, BOX1
-	ld a, 0 + 16 
-	ld [BOX1 + OAMA_Y], a     ; Store the object's Y value
-	ld a, 48 + 8   ; 
-	ld [BOX1 + OAMA_X], a     ; Store the object's X value
-	ld a, 0		   
-	ld [BOX1 + OAMA_TILEID], a ; Set Object's Tile ID to 0
-	ld [BOX1 + OAMA_FLAGS], a ; Set Object's Attributes to 0
-
-	ld hl, BOX2
-	ld a, 0 + 16 
-	ld [BOX2 + OAMA_Y], a      ; Store the object's Y value
-	ld a, 56 + 8   
-	ld [BOX2 + OAMA_X], a      ; Store the object's X value
-	ld a, 0		               
-	ld [BOX2 + OAMA_TILEID], a ; Set Object's Tile ID to 0
-	ld [BOX2 + OAMA_FLAGS], a  ; Set Object's Attributes to 0
-
-	ld hl, BOX3
-	ld a, 8 + 16 
-	ld [BOX3 + OAMA_Y], a      ; Store the object's Y value
-	ld a, 48 + 8   
-	ld [BOX3 + OAMA_X], a      ; Store the object's X value
-	ld a, 0		               
-	ld [BOX3 + OAMA_TILEID], a ; Set Object's Tile ID to 0
-	ld [BOX3 + OAMA_FLAGS], a  ; Set Object's Attributes to 0
-
-	ld hl, BOX4
-	ld a, 8 + 16 
-	ld [BOX4 + OAMA_Y], a      ; Store the object's Y value
-	ld a, 56 + 8   ; 
-	ld [BOX4 + OAMA_X], a      ; Store the object's X value
-	ld a, 0		   
-	ld [BOX4 + OAMA_TILEID], a ; Set Object's Tile ID to 0
-	ld [BOX4 + OAMA_FLAGS], a  ; Set Object's Attributes to 0
+	
+	call InitOrigin ; set origin to start position
+	; call InitBoxes  ; zero out the OAM objects
 
 ; Turn the LCD on, with objects enabled
 	ld a, LCDCF_ON | LCDCF_BGON | LCDCF_OBJON
@@ -108,7 +83,7 @@ ClearOam:
 	ld a, %11100100
 	ld [rOBP0], a   ; r0BP0 -- register for Object palette data 0 -- what does this mean??
 	
-	; Initialize wFrameCounter=0
+	; Initialize vars to 0
 	ld a, 0
 	ld [wFrameCounter], a
 	ld [moveDirection], a
@@ -144,24 +119,26 @@ HandleMovement:
 	call CheckInputAll
 HandleMovementEnd:
 
+	call CalcPos_O
+
 	ld a, [wFrameCounter] ; Only execute code below every 15 frames
 	cp 15
 	jp nz, Main
+
 	
 	; reset frame counter to 0
 	ld a, 0
 	ld [wFrameCounter], a
-	; store b=y_min, c=y_max	
 	
-	ld hl, BOX3
-	call CheckAllTilesBelow
-	jp z, Main
-
 	; check if any blocks of the falling tetronimo are at the bottom of the playfield
 	call GetMinMaxY
 	ld a, c
 	cp PLAYFIELD_BOTTOM_BORDER
-	call nz, MoveTetronimoDown
+	jp z, Main
+
+	ld hl, BOX3
+	call CheckAllTilesBelow
+	call z, MoveOriginDown
 
 	jp Main
 
@@ -188,6 +165,7 @@ Memcopy:
 	jp nz, Memcopy; Continue loop until we finished copying all tetronimo bytes
 	ret
 
+INCLUDE "tetronimo.inc"
 INCLUDE "movement.inc"
 INCLUDE "input.inc"
 INCLUDE "tiledata.inc"
@@ -202,3 +180,6 @@ SECTION "Input Variables", WRAM0
 wCurKeys: db
 wNewKeys: db
 
+SECTION "Tetronimo Variables", WRAM0
+originX: db
+originY: db
